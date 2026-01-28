@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import PublicPage from '/components/PublicPage';
-import AdminDashboard from '/components/AdminDashboard';
-import Login from '/components/Login';
-import { SiteContent, User } from '/types.ts';
-import { DEFAULT_CONTENT, STORAGE_KEY, AUTH_KEY } from '/constants';
+import PublicPage from './components/PublicPage';
+import AdminDashboard from './components/AdminDashboard';
+import Login from './components/Login';
+import { SiteContent, User } from './types';
+import { DEFAULT_CONTENT, STORAGE_KEY, AUTH_KEY } from './constants';
 
 // Context for shared site content
 interface ContentContextType {
