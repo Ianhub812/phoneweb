@@ -1,0 +1,5 @@
+{
+  "name": "QuickCMS - Live Preview Site Builder",
+  "description": "A high-performance React application featuring a public landing page and a secure admin dashboard with real-time content preview and persistent storage.",
+  "requestFramePermissions": []
+}
