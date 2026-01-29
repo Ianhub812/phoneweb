@@ -26,9 +26,14 @@ export interface SiteContent {
   sliderItems: SliderItem[];
   primaryColor: string;
   accentColor: string;
+  // Service 1
   repairTitle: string;
   repairDesc: string;
   repairImage: string;
+  // Service 2 (Battery)
+  service2Title: string;
+  service2Desc: string;
+  service2Image: string;
   priceRows: PriceRow[];
   faqs: FAQItem[];
   contactEmail: string;

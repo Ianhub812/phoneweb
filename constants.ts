@@ -17,6 +17,9 @@ export const DEFAULT_CONTENT: SiteContent = {
   repairTitle: "iPhone 螢幕維修",
   repairDesc: "我們提供現場 30 分鐘快速更換螢幕服務。不論是顯示異常、觸控失靈、或是玻璃破裂，我們都能完美修復。",
   repairImage: "https://images.unsplash.com/photo-1512499617640-c74ae3a49dd5?auto=format&fit=crop&q=80&w=1000",
+  service2Title: "電池健康度保養",
+  service2Desc: "您的手機是否耗電飛快？我們提供原廠等級電池更換服務，現場更換不留機，並提供電池健康度數據檢測。",
+  service2Image: "https://images.unsplash.com/photo-1597740985671-2a8a3b80502e?auto=format&fit=crop&q=80&w=1000",
   priceRows: [
     { model: "iPhone 15 Pro", battery: "$2,200", screen: "$11,500", lens: "$4,500", motherboard: "現場檢測", backGlass: "$5,000" },
     { model: "iPhone 15", battery: "$2,000", screen: "$9,500", lens: "$3,800", motherboard: "現場檢測", backGlass: "$4,500" },
