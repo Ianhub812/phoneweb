@@ -13,9 +13,8 @@ const PublicPage: React.FC = () => {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
   const sliderWrapperRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<number | null>(null);
 
-  // Dragging state with Axis Locking
+  // Dragging state
   const isDragging = useRef(false);
   const startX = useRef(0);
   const startY = useRef(0);
@@ -26,10 +25,21 @@ const PublicPage: React.FC = () => {
   const realSlides = content.sliderItems;
   const slideCount = realSlides.length;
   const slides = [
-    realSlides[slideCount - 1], // Clone of last
-    ...realSlides,              // Real
-    realSlides[0]               // Clone of first
+    realSlides[slideCount - 1], // Clone of last (Index 0)
+    ...realSlides,              // Real (Index 1 to slideCount)
+    realSlides[0]               // Clone of first (Index slideCount + 1)
   ];
+
+  // Auto-slide Timer logic: Shortened and resets on index change
+  useEffect(() => {
+    if (isDragging.current || isTransitioning) return;
+
+    const timer = setTimeout(() => {
+      moveToNext();
+    }, 4000); // Shortened interval: 4 seconds
+
+    return () => clearTimeout(timer);
+  }, [currentIndex, isTransitioning]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -39,14 +49,11 @@ const PublicPage: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Initial Position & Resize
   useEffect(() => {
     setPosition();
     window.addEventListener('resize', handleResize);
-    startTimer();
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      stopTimer();
-    };
+    return () => window.removeEventListener('resize', handleResize);
   }, [realSlides]);
 
   const handleResize = () => {
@@ -70,17 +77,6 @@ const PublicPage: React.FC = () => {
     }
   };
 
-  const startTimer = () => {
-    stopTimer();
-    timerRef.current = window.setInterval(() => {
-      if (!isDragging.current) moveToNext();
-    }, 5000);
-  };
-
-  const stopTimer = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-  };
-
   const moveToNext = () => {
     if (isTransitioning) return;
     const nextIdx = currentIndex + 1;
@@ -91,8 +87,7 @@ const PublicPage: React.FC = () => {
   const animateToSlide = (index: number) => {
     if (!sliderRef.current) return;
     setIsTransitioning(true);
-    // Slowed down to 0.8s for premium smoothness as requested
-    const duration = 0.8;
+    const duration = 0.8; // Smooth 0.8s transition
     sliderRef.current.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.1, 0.25, 1.0)`;
     
     const w = getSlideWidth();
@@ -107,6 +102,7 @@ const PublicPage: React.FC = () => {
     if (!sliderRef.current) return;
 
     let newIndex = currentIndex;
+    // Boundary checks for infinite loop
     if (currentIndex === 0) {
       newIndex = slideCount;
     } else if (currentIndex === slideCount + 1) {
@@ -133,12 +129,10 @@ const PublicPage: React.FC = () => {
   };
 
   const dragStart = (e: React.MouseEvent | React.TouchEvent) => {
-    // If it's already moving fast, don't allow new drag to prevent "getting stuck"
     if (isTransitioning) return;
     
     isDragging.current = true;
-    isHorizontalSwipe.current = null; // Reset axis lock
-    stopTimer();
+    isHorizontalSwipe.current = null;
     
     if (sliderRef.current) {
       sliderRef.current.style.transition = 'none';
@@ -147,7 +141,6 @@ const PublicPage: React.FC = () => {
     startX.current = getX(e);
     startY.current = getY(e);
     
-    // Capture precise current position
     const matrix = new WebKitCSSMatrix(window.getComputedStyle(sliderRef.current!).transform);
     prevTranslate.current = matrix.m41;
   };
@@ -160,24 +153,19 @@ const PublicPage: React.FC = () => {
     const diffX = currentX - startX.current;
     const diffY = currentY - startY.current;
 
-    // Axis Locking Logic: Determine if user wants to scroll or swipe
     if (isHorizontalSwipe.current === null) {
       if (Math.abs(diffX) > 10 || Math.abs(diffY) > 10) {
         isHorizontalSwipe.current = Math.abs(diffX) > Math.abs(diffY);
       }
     }
 
-    // If it's a vertical scroll, let the browser handle it
     if (isHorizontalSwipe.current === false) return;
 
-    // If it's horizontal, prevent browser from scrolling the whole page
     if (isHorizontalSwipe.current === true) {
       if (e.cancelable) e.preventDefault();
-      
       const w = getSlideWidth();
       const maxT = 0;
       const minT = -(slideCount + 1) * w;
-      
       currentTranslate.current = Math.max(minT, Math.min(maxT, prevTranslate.current + diffX));
       sliderRef.current.style.transform = `translateX(${currentTranslate.current}px)`;
     }
@@ -187,40 +175,41 @@ const PublicPage: React.FC = () => {
     if (!isDragging.current) return;
     isDragging.current = false;
 
-    if (isHorizontalSwipe.current === false) {
-      startTimer();
-      return;
-    }
+    if (isHorizontalSwipe.current === false) return;
 
     const w = getSlideWidth();
     const movedBy = currentTranslate.current - prevTranslate.current;
     
-    // Determine next index based on swipe distance
     let newIndex = Math.round(-currentTranslate.current / w);
     
-    // If swiped enough (20% of width), move to next/prev
-    if (movedBy < -w * 0.15) {
+    // Threshold to switch slide (20% of width)
+    if (movedBy < -w * 0.2) {
       newIndex = Math.ceil(-currentTranslate.current / w);
-    } else if (movedBy > w * 0.15) {
+    } else if (movedBy > w * 0.2) {
       newIndex = Math.floor(-currentTranslate.current / w);
     }
 
-    // Boundary safety
     if (newIndex < 0) newIndex = 0;
     if (newIndex > slideCount + 1) newIndex = slideCount + 1;
 
     setCurrentIndex(newIndex);
     animateToSlide(newIndex);
-    startTimer();
   };
 
   const handleDotClick = (i: number) => {
     if (isTransitioning) return;
-    stopTimer();
     const nextIdx = i + 1;
     setCurrentIndex(nextIdx);
     animateToSlide(nextIdx);
-    startTimer();
+  };
+
+  // Helper to get active dot index (0-based) correctly matching the real slides
+  const getActiveDotIndex = () => {
+    // slideCount is total real images
+    // currentIndex: 0(CloneLast), 1(Real1), ..., N(RealN), N+1(CloneFirst)
+    let idx = (currentIndex - 1) % slideCount;
+    if (idx < 0) idx = slideCount - 1;
+    return idx;
   };
 
   return (
@@ -232,18 +221,15 @@ const PublicPage: React.FC = () => {
       />
       <nav className={`fixed top-0 left-0 w-[280px] h-full bg-white z-[1100] p-6 transition-transform duration-300 shadow-xl ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <h2 className="text-2xl font-bold mb-8">網站地圖</h2>
-        <ul className="space-y-4">
+        <ul className="space-y-4 text-sm">
           <li className="pb-4 border-b border-gray-100">
             <a href="#service1" className="text-gray-800 no-underline hover:text-green-600 font-medium" onClick={() => setIsSidebarOpen(false)}>iPhone 螢幕維修</a>
-          </li>
-          <li className="pb-4 border-b border-gray-100">
-            <a href="#service2" className="text-gray-800 no-underline hover:text-green-600 font-medium" onClick={() => setIsSidebarOpen(false)}>電池保養服務</a>
           </li>
           <li className="pb-4 border-b border-gray-100">
             <a href="#prices" className="text-gray-800 no-underline hover:text-green-600 font-medium" onClick={() => setIsSidebarOpen(false)}>維修價目表</a>
           </li>
           <li className="pb-4 border-b border-gray-100">
-            <Link to="/login" className="text-blue-600 no-underline font-bold" onClick={() => setIsSidebarOpen(false)}>Admin Login</Link>
+            <Link to="/login" className="text-blue-600 no-underline font-bold" onClick={() => setIsSidebarOpen(false)}>管理員登入</Link>
           </li>
         </ul>
       </nav>
@@ -254,7 +240,7 @@ const PublicPage: React.FC = () => {
         <button className="text-2xl focus:outline-none" onClick={() => setIsSidebarOpen(true)}>☰</button>
       </header>
 
-      {/* Slider Wrapper - touch-action set to pan-y for smooth axis behavior */}
+      {/* Slider Wrapper */}
       <div ref={sliderWrapperRef} className="relative overflow-hidden w-full h-[350px] bg-white group" style={{ touchAction: 'pan-y' }}>
         <div 
           ref={sliderRef}
@@ -288,27 +274,22 @@ const PublicPage: React.FC = () => {
           ))}
         </div>
         
-        {/* Dots */}
+        {/* Dots - Corrected Logic */}
         <div className="absolute bottom-5 left-0 w-full flex justify-center gap-3 z-20">
           {realSlides.map((_, i) => {
-            let active = false;
-            let dotIdx = currentIndex - 1;
-            if (currentIndex === 0) dotIdx = slideCount - 1;
-            if (currentIndex === slideCount + 1) dotIdx = 0;
-            active = dotIdx === i;
-
+            const isActive = i === getActiveDotIndex();
             return (
               <span 
                 key={i} 
                 onClick={() => handleDotClick(i)}
-                className={`w-2.5 h-2.5 rounded-full cursor-pointer transition-all duration-300 ${active ? 'bg-[#1FC81F] scale-125' : 'bg-gray-300 opacity-60'}`}
+                className={`w-2.5 h-2.5 rounded-full cursor-pointer transition-all duration-300 ${isActive ? 'bg-[#1FC81F] scale-125' : 'bg-white opacity-60'}`}
               />
             );
           })}
         </div>
       </div>
 
-      {/* iPhone Screen Service */}
+      {/* Services Section */}
       <section id="service1" className="py-16">
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center gap-12">
@@ -322,36 +303,7 @@ const PublicPage: React.FC = () => {
                   <div className="absolute -bottom-2 left-0 w-3/5 h-1.5 bg-[#f5c339]"></div>
                 </h2>
                 <p className="text-gray-600 mb-6 text-lg leading-relaxed">{content.repairDesc}</p>
-                <ul className="space-y-3 text-gray-500">
-                  <li className="flex items-center"><span className="text-[#1FC81F] mr-2">✅</span> 高品質 BSMI 認證零件</li>
-                  <li className="flex items-center"><span className="text-[#1FC81F] mr-2">✅</span> 工程師現場一對一維修</li>
-                  <li className="flex items-center"><span className="text-[#1FC81F] mr-2">✅</span> 維修後提供完整功能測試</li>
-                </ul>
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Why Choose Us */}
-      <section className="py-20 bg-gray-50">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-12">為什麼選擇保衛站？</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-10 bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition">
-              <div className="text-5xl mb-6">🛠️</div>
-              <h4 className="text-xl font-bold mb-4">專業技術</h4>
-              <p className="text-gray-500">十年以上維修經驗，精修各種主機板疑難雜症。</p>
-            </div>
-            <div className="p-10 bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition">
-              <div className="text-5xl mb-6">⚡</div>
-              <h4 className="text-xl font-bold mb-4">快速取件</h4>
-              <p className="text-gray-500">現場備料充足，簡單維修最快 20 分鐘即可完工。</p>
-            </div>
-            <div className="p-10 bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition">
-              <div className="text-5xl mb-6">🛡️</div>
-              <h4 className="text-xl font-bold mb-4">售後保固</h4>
-              <p className="text-gray-500">所有維修零件皆提供長效保固，全台連鎖服務。</p>
             </div>
           </div>
         </div>
@@ -362,7 +314,6 @@ const PublicPage: React.FC = () => {
         <div className="container mx-auto px-4">
           <div className="text-center mb-10">
             <h2 className="text-3xl font-bold mb-2">維修價格透明化</h2>
-            <div className="text-gray-400 md:hidden text-sm">💡 左右滑動查看完整表格</div>
           </div>
           <div className="overflow-x-auto bg-white rounded-2xl shadow-xl border border-gray-100">
             <table className="w-full text-left border-collapse">
@@ -371,9 +322,6 @@ const PublicPage: React.FC = () => {
                   <th className="px-6 py-4 whitespace-nowrap">機型名稱</th>
                   <th className="px-6 py-4 whitespace-nowrap">更換電池</th>
                   <th className="px-6 py-4 whitespace-nowrap">更換螢幕</th>
-                  <th className="px-6 py-4 whitespace-nowrap">鏡頭維修</th>
-                  <th className="px-6 py-4 whitespace-nowrap">主機板維修</th>
-                  <th className="px-6 py-4 whitespace-nowrap">後玻璃更換</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -382,9 +330,6 @@ const PublicPage: React.FC = () => {
                     <td className="px-6 py-4 font-bold">{row.model}</td>
                     <td className="px-6 py-4">{row.battery}</td>
                     <td className="px-6 py-4">{row.screen}</td>
-                    <td className="px-6 py-4">{row.lens}</td>
-                    <td className="px-6 py-4">{row.motherboard}</td>
-                    <td className="px-6 py-4">{row.backGlass}</td>
                   </tr>
                 ))}
               </tbody>
@@ -393,38 +338,20 @@ const PublicPage: React.FC = () => {
         </div>
       </section>
 
-      {/* FAQ */}
-      <section id="faq" className="py-20">
-        <div className="container mx-auto px-4 max-w-[800px]">
-          <h2 className="text-center text-3xl font-bold mb-12">常見問題</h2>
-          <div className="space-y-12">
-            {content.faqs.map(faq => (
-              <div key={faq.id}>
-                <h5 className="text-xl font-bold text-green-600 mb-3">Q: {faq.question}</h5>
-                <p className="text-gray-600">A: {faq.answer}</p>
-                <hr className="mt-8 border-gray-100" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-16">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-lg mb-4">© 2024 保衛站 GUARD STATION | 專業維修中心</p>
-          <div className="text-gray-400 space-y-1 text-sm">
-            <p>營業時間：11:00 - 21:00</p>
+        <div className="container mx-auto px-4 text-center text-sm">
+          <p>© 2024 {content.brandName} | 專業維修中心</p>
+          <div className="text-gray-400 mt-4">
             <p>地址：{content.contactAddress}</p>
             <p>電話：{content.contactPhone}</p>
           </div>
         </div>
       </footer>
 
-      {/* FAB */}
+      {/* Floating Action Buttons */}
       <div className="fixed right-6 bottom-8 flex flex-col gap-3 z-[1000]">
-        <a href="https://line.me" className="w-14 h-14 rounded-full bg-[#06C755] flex items-center justify-center text-white font-bold no-underline shadow-lg hover:scale-110 transition" target="_blank">LINE</a>
-        <a href={`tel:${content.contactPhone}`} className="w-14 h-14 rounded-full bg-gray-900 flex items-center justify-center text-white font-bold no-underline shadow-lg hover:scale-110 transition">電話</a>
+        <a href={`tel:${content.contactPhone}`} className="w-14 h-14 rounded-full bg-green-600 flex items-center justify-center text-white font-bold no-underline shadow-lg hover:scale-110 transition">☎️</a>
         <button 
           className={`w-14 h-14 rounded-full bg-white text-gray-800 flex items-center justify-center font-bold shadow-lg transition-all duration-300 ${showBackToTop ? 'opacity-100 scale-100' : 'opacity-0 scale-0 pointer-events-none'}`}
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
