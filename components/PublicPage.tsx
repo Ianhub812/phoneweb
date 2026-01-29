@@ -8,26 +8,27 @@ const PublicPage: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
   
-  // Slider State - Matching original HTML logic
+  // Slider State
   const [currentIndex, setCurrentIndex] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
   const sliderWrapperRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<number | null>(null);
 
-  // Dragging state
+  // Dragging state with Axis Locking
   const isDragging = useRef(false);
   const startX = useRef(0);
+  const startY = useRef(0);
+  const isHorizontalSwipe = useRef<boolean | null>(null);
   const currentTranslate = useRef(0);
   const prevTranslate = useRef(0);
 
   const realSlides = content.sliderItems;
   const slideCount = realSlides.length;
-  // Clone logic matching the HTML script
   const slides = [
-    realSlides[slideCount - 1], // Clone of last slide (Index 0)
-    ...realSlides,              // Real slides (Index 1 to slideCount)
-    realSlides[0]               // Clone of first slide (Index slideCount + 1)
+    realSlides[slideCount - 1], // Clone of last
+    ...realSlides,              // Real
+    realSlides[0]               // Clone of first
   ];
 
   useEffect(() => {
@@ -38,7 +39,6 @@ const PublicPage: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Initialization & Resize handling
   useEffect(() => {
     setPosition();
     window.addEventListener('resize', handleResize);
@@ -73,7 +73,7 @@ const PublicPage: React.FC = () => {
   const startTimer = () => {
     stopTimer();
     timerRef.current = window.setInterval(() => {
-      moveToNext();
+      if (!isDragging.current) moveToNext();
     }, 5000);
   };
 
@@ -82,6 +82,7 @@ const PublicPage: React.FC = () => {
   };
 
   const moveToNext = () => {
+    if (isTransitioning) return;
     const nextIdx = currentIndex + 1;
     setCurrentIndex(nextIdx);
     animateToSlide(nextIdx);
@@ -89,16 +90,16 @@ const PublicPage: React.FC = () => {
 
   const animateToSlide = (index: number) => {
     if (!sliderRef.current) return;
-    const isMobile = window.innerWidth <= 768;
-    const duration = isMobile ? 0.6 : 0.4;
-    sliderRef.current.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.46, 0.45, 0.94)`;
+    setIsTransitioning(true);
+    // Slowed down to 0.8s for premium smoothness as requested
+    const duration = 0.8;
+    sliderRef.current.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.1, 0.25, 1.0)`;
     
     const w = getSlideWidth();
     const t = -index * w;
     sliderRef.current.style.transform = `translateX(${t}px)`;
     currentTranslate.current = t;
     prevTranslate.current = t;
-    setIsTransitioning(true);
   };
 
   const onTransitionEnd = () => {
@@ -123,50 +124,90 @@ const PublicPage: React.FC = () => {
     }
   };
 
-  // Drag Events
   const getX = (e: React.MouseEvent | React.TouchEvent) => {
     return 'touches' in e ? e.touches[0].pageX : (e as React.MouseEvent).pageX;
   };
 
+  const getY = (e: React.MouseEvent | React.TouchEvent) => {
+    return 'touches' in e ? e.touches[0].pageY : (e as React.MouseEvent).pageY;
+  };
+
   const dragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    // If it's already moving fast, don't allow new drag to prevent "getting stuck"
+    if (isTransitioning) return;
+    
     isDragging.current = true;
+    isHorizontalSwipe.current = null; // Reset axis lock
     stopTimer();
+    
     if (sliderRef.current) {
       sliderRef.current.style.transition = 'none';
     }
+    
     startX.current = getX(e);
-    // Capture current translate from style to prevent snapping
+    startY.current = getY(e);
+    
+    // Capture precise current position
     const matrix = new WebKitCSSMatrix(window.getComputedStyle(sliderRef.current!).transform);
     prevTranslate.current = matrix.m41;
   };
 
   const dragging = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDragging.current || !sliderRef.current) return;
+    
     const currentX = getX(e);
-    const moveX = currentX - startX.current;
-    
-    const w = getSlideWidth();
-    const maxT = 0;
-    const minT = -(slideCount + 1) * w;
-    
-    currentTranslate.current = Math.max(minT, Math.min(maxT, prevTranslate.current + moveX));
-    sliderRef.current.style.transform = `translateX(${currentTranslate.current}px)`;
+    const currentY = getY(e);
+    const diffX = currentX - startX.current;
+    const diffY = currentY - startY.current;
+
+    // Axis Locking Logic: Determine if user wants to scroll or swipe
+    if (isHorizontalSwipe.current === null) {
+      if (Math.abs(diffX) > 10 || Math.abs(diffY) > 10) {
+        isHorizontalSwipe.current = Math.abs(diffX) > Math.abs(diffY);
+      }
+    }
+
+    // If it's a vertical scroll, let the browser handle it
+    if (isHorizontalSwipe.current === false) return;
+
+    // If it's horizontal, prevent browser from scrolling the whole page
+    if (isHorizontalSwipe.current === true) {
+      if (e.cancelable) e.preventDefault();
+      
+      const w = getSlideWidth();
+      const maxT = 0;
+      const minT = -(slideCount + 1) * w;
+      
+      currentTranslate.current = Math.max(minT, Math.min(maxT, prevTranslate.current + diffX));
+      sliderRef.current.style.transform = `translateX(${currentTranslate.current}px)`;
+    }
   };
 
   const dragEnd = () => {
     if (!isDragging.current) return;
     isDragging.current = false;
 
+    if (isHorizontalSwipe.current === false) {
+      startTimer();
+      return;
+    }
+
     const w = getSlideWidth();
     const movedBy = currentTranslate.current - prevTranslate.current;
     
+    // Determine next index based on swipe distance
     let newIndex = Math.round(-currentTranslate.current / w);
-
-    if (movedBy < -w * 0.2) {
+    
+    // If swiped enough (20% of width), move to next/prev
+    if (movedBy < -w * 0.15) {
       newIndex = Math.ceil(-currentTranslate.current / w);
-    } else if (movedBy > w * 0.2) {
+    } else if (movedBy > w * 0.15) {
       newIndex = Math.floor(-currentTranslate.current / w);
     }
+
+    // Boundary safety
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex > slideCount + 1) newIndex = slideCount + 1;
 
     setCurrentIndex(newIndex);
     animateToSlide(newIndex);
@@ -174,6 +215,7 @@ const PublicPage: React.FC = () => {
   };
 
   const handleDotClick = (i: number) => {
+    if (isTransitioning) return;
     stopTimer();
     const nextIdx = i + 1;
     setCurrentIndex(nextIdx);
@@ -212,8 +254,8 @@ const PublicPage: React.FC = () => {
         <button className="text-2xl focus:outline-none" onClick={() => setIsSidebarOpen(true)}>☰</button>
       </header>
 
-      {/* Slider Wrapper */}
-      <div ref={sliderWrapperRef} className="relative overflow-hidden w-full h-[350px] bg-white group">
+      {/* Slider Wrapper - touch-action set to pan-y for smooth axis behavior */}
+      <div ref={sliderWrapperRef} className="relative overflow-hidden w-full h-[350px] bg-white group" style={{ touchAction: 'pan-y' }}>
         <div 
           ref={sliderRef}
           className="flex h-full will-change-transform cursor-grab active:cursor-grabbing"
