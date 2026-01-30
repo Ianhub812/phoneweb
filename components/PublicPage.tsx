@@ -1,21 +1,19 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useContent } from '../App';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
+import { SliderItem, FAQItem, PriceTableContent } from '../types';
 
-const PublicPage: React.FC = () => {
-  const { content } = useContent();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [showBackToTop, setShowBackToTop] = useState(false);
-  
-  // Slider State
+// --- Modular Components ---
+
+const HeroSlider: React.FC<{ items: SliderItem[] }> = ({ items }) => {
   const [currentIndex, setCurrentIndex] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
-  const sliderWrapperRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const transitionTimerRef = useRef<number | null>(null);
-  const lastWidth = useRef<number>(0);
 
+  // Drag Refs for performance
   const isDragging = useRef(false);
   const startX = useRef(0);
   const startY = useRef(0);
@@ -23,63 +21,14 @@ const PublicPage: React.FC = () => {
   const currentTranslate = useRef(0);
   const prevTranslate = useRef(0);
 
-  const realSlides = content.sliderItems;
-  const slideCount = realSlides.length;
-  const slides = [
-    realSlides[slideCount - 1], 
-    ...realSlides,              
-    realSlides[0]               
-  ];
+  const count = items.length;
+  if (count === 0) return null;
+  // Clone for seamless loop
+  const slides = [items[count - 1], ...items, items[0]];
 
-  // Helper to get active dot index
-  const getActiveDotIndex = useCallback(() => {
-    let idx = (currentIndex - 1) % slideCount;
-    if (idx < 0) idx = slideCount - 1;
-    return idx;
-  }, [currentIndex, slideCount]);
+  const getSlideWidth = useCallback(() => containerRef.current?.getBoundingClientRect().width || 0, []);
 
-  // Auto-slide Timer logic
-  useEffect(() => {
-    if (isDragging.current || isTransitioning) return;
-    const timer = setTimeout(() => {
-      moveToNext();
-    }, 4000); 
-    return () => clearTimeout(timer);
-  }, [currentIndex, isTransitioning]);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setShowBackToTop(window.scrollY > 300);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Initial Position & Resize (with Width Guard for Mobile)
-  useEffect(() => {
-    lastWidth.current = getSlideWidth();
-    setPosition();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [realSlides]);
-
-  const handleResize = () => {
-    const newWidth = getSlideWidth();
-    // Only re-position if width actually changed (ignores mobile address bar height changes)
-    if (newWidth !== lastWidth.current && newWidth > 0) {
-      lastWidth.current = newWidth;
-      if (sliderRef.current) {
-        sliderRef.current.style.transition = 'none';
-        setPosition();
-      }
-    }
-  };
-
-  const getSlideWidth = () => {
-    return sliderWrapperRef.current?.getBoundingClientRect().width || 0;
-  };
-
-  const setPosition = (index = currentIndex) => {
+  const setPosition = useCallback((index: number) => {
     if (sliderRef.current) {
       const w = getSlideWidth();
       const t = -index * w;
@@ -87,14 +36,27 @@ const PublicPage: React.FC = () => {
       currentTranslate.current = t;
       prevTranslate.current = t;
     }
-  };
+  }, [getSlideWidth]);
 
-  const moveToNext = () => {
-    if (isTransitioning) return;
-    const nextIdx = currentIndex + 1;
-    setCurrentIndex(nextIdx);
-    animateToSlide(nextIdx);
-  };
+  // Initial Sync & Resize
+  useEffect(() => {
+    setPosition(currentIndex);
+    const handleResize = () => {
+      if (sliderRef.current) sliderRef.current.style.transition = 'none';
+      setPosition(currentIndex);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [items, currentIndex, setPosition]);
+
+  // Auto Play
+  useEffect(() => {
+    if (isDragging.current || isTransitioning || count <= 1) return;
+    const timer = setTimeout(() => {
+      moveToNext(currentIndex + 1);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [currentIndex, isTransitioning, count]);
 
   const onTransitionEnd = useCallback(() => {
     if (transitionTimerRef.current) {
@@ -107,27 +69,24 @@ const PublicPage: React.FC = () => {
 
     let newIndex = currentIndex;
     if (currentIndex === 0) {
-      newIndex = slideCount;
-    } else if (currentIndex === slideCount + 1) {
+      newIndex = count;
+    } else if (currentIndex === count + 1) {
       newIndex = 1;
     }
 
     if (newIndex !== currentIndex) {
       sliderRef.current.style.transition = 'none';
       setCurrentIndex(newIndex);
-      const w = getSlideWidth();
-      const t = -newIndex * w;
-      sliderRef.current.style.transform = `translateX(${t}px)`;
-      currentTranslate.current = t;
-      prevTranslate.current = t;
+      setPosition(newIndex);
     }
-  }, [currentIndex, slideCount]);
+  }, [currentIndex, count, setPosition]);
 
-  const animateToSlide = (index: number) => {
-    if (!sliderRef.current) return;
+  const moveToNext = (index: number) => {
+    if (isTransitioning || !sliderRef.current) return;
     setIsTransitioning(true);
+    setCurrentIndex(index);
     
-    const duration = 0.8; 
+    const duration = 0.8;
     sliderRef.current.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.1, 0.25, 1.0)`;
     
     const w = getSlideWidth();
@@ -136,30 +95,24 @@ const PublicPage: React.FC = () => {
     currentTranslate.current = t;
     prevTranslate.current = t;
 
-    // SAFETY TIMEOUT: Force-clear transition state if browser fails to trigger transitionend
     if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
     transitionTimerRef.current = window.setTimeout(() => {
       onTransitionEnd();
-    }, duration * 1000 + 100); // duration + small buffer
+    }, duration * 1000 + 50);
   };
 
-  const getX = (e: React.MouseEvent | React.TouchEvent) => {
-    return 'touches' in e ? e.touches[0].pageX : (e as React.MouseEvent).pageX;
-  };
-
-  const getY = (e: React.MouseEvent | React.TouchEvent) => {
-    return 'touches' in e ? e.touches[0].pageY : (e as React.MouseEvent).pageY;
-  };
+  const getX = (e: React.MouseEvent | React.TouchEvent) => 'touches' in e ? e.touches[0].pageX : e.pageX;
+  const getY = (e: React.MouseEvent | React.TouchEvent) => 'touches' in e ? e.touches[0].pageY : e.pageY;
 
   const dragStart = (e: React.MouseEvent | React.TouchEvent) => {
     if (isTransitioning) return;
     isDragging.current = true;
     isHorizontalSwipe.current = null;
     if (sliderRef.current) sliderRef.current.style.transition = 'none';
+    
     startX.current = getX(e);
     startY.current = getY(e);
     
-    // Use WebKitCSSMatrix to get current translate value safely
     try {
       const style = window.getComputedStyle(sliderRef.current!);
       const matrix = new WebKitCSSMatrix(style.transform);
@@ -171,6 +124,7 @@ const PublicPage: React.FC = () => {
 
   const dragging = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDragging.current || !sliderRef.current) return;
+    
     const currentX = getX(e);
     const currentY = getY(e);
     const diffX = currentX - startX.current;
@@ -182,13 +136,11 @@ const PublicPage: React.FC = () => {
       }
     }
 
-    if (isHorizontalSwipe.current === false) return;
-
     if (isHorizontalSwipe.current === true) {
       if (e.cancelable) e.preventDefault();
       const w = getSlideWidth();
       const maxT = 0;
-      const minT = -(slideCount + 1) * w;
+      const minT = -(count + 1) * w;
       currentTranslate.current = Math.max(minT, Math.min(maxT, prevTranslate.current + diffX));
       sliderRef.current.style.transform = `translateX(${currentTranslate.current}px)`;
     }
@@ -198,7 +150,8 @@ const PublicPage: React.FC = () => {
     if (!isDragging.current) return;
     isDragging.current = false;
     
-    if (isHorizontalSwipe.current === false || isHorizontalSwipe.current === null) {
+    if (isHorizontalSwipe.current !== true) {
+      setPosition(currentIndex);
       return;
     }
 
@@ -213,240 +166,235 @@ const PublicPage: React.FC = () => {
     }
 
     if (newIndex < 0) newIndex = 0;
-    if (newIndex > slideCount + 1) newIndex = slideCount + 1;
+    if (newIndex > count + 1) newIndex = count + 1;
     
-    setCurrentIndex(newIndex);
-    animateToSlide(newIndex);
-  };
-
-  const handleDotClick = (i: number) => {
-    if (isTransitioning) return;
-    const nextIdx = i + 1;
-    setCurrentIndex(nextIdx);
-    animateToSlide(nextIdx);
+    moveToNext(newIndex);
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Overlay & Sidebar */}
+    <div 
+      ref={containerRef} 
+      className="relative overflow-hidden w-full h-[350px] md:h-[600px] bg-white group"
+      style={{ touchAction: 'pan-y' }}
+    >
       <div 
-        className={`fixed inset-0 bg-black/50 z-[1050] transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        onClick={() => setIsSidebarOpen(false)}
-      />
-      <nav className={`fixed top-0 left-0 w-[280px] h-full bg-white z-[1100] p-6 transition-transform duration-300 shadow-xl ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <h2 className="text-2xl font-bold mb-8 text-gray-800">網站地圖</h2>
-        <ul className="space-y-4">
-          <li className="pb-4 border-b border-gray-100">
-            <a href="#service1" className="text-gray-800 no-underline hover:text-green-600 font-medium block" onClick={() => setIsSidebarOpen(false)}>iPhone 螢幕維修</a>
-          </li>
-          <li className="pb-4 border-b border-gray-100">
-            <a href="#service2" className="text-gray-800 no-underline hover:text-green-600 font-medium block" onClick={() => setIsSidebarOpen(false)}>電池保養服務</a>
-          </li>
-          <li className="pb-4 border-b border-gray-100">
-            <a href="#prices" className="text-gray-800 no-underline hover:text-green-600 font-medium block" onClick={() => setIsSidebarOpen(false)}>維修價目表</a>
-          </li>
-          <li className="pb-4 border-b border-gray-100">
-            <a href="#faq" className="text-gray-800 no-underline hover:text-green-600 font-medium block" onClick={() => setIsSidebarOpen(false)}>常見問題</a>
-          </li>
-          <li className="pb-4 border-b border-gray-100">
-            <Link to="/login" className="text-blue-600 no-underline font-bold block" onClick={() => setIsSidebarOpen(false)}>管理員登入</Link>
+        ref={sliderRef}
+        className="flex h-full will-change-transform cursor-grab active:cursor-grabbing"
+        onMouseDown={dragStart}
+        onMouseMove={dragging}
+        onMouseUp={dragEnd}
+        onMouseLeave={dragEnd}
+        onTouchStart={dragStart}
+        onTouchMove={dragging}
+        onTouchEnd={dragEnd}
+        onTransitionEnd={onTransitionEnd}
+      >
+        {slides.map((s, i) => (
+          <div 
+            key={`${s.id}-${i}`}
+            className="flex-shrink-0 w-full h-full relative overflow-hidden flex items-center justify-center text-white text-3xl md:text-5xl font-black select-none"
+            style={{ backgroundColor: s.bgColor }}
+          >
+            {s.imageUrl && <img src={s.imageUrl} className="absolute inset-0 w-full h-full object-cover pointer-events-none" alt="" />}
+            <div className="absolute inset-0 bg-black/20" />
+            <div className="relative z-10 px-8 text-center drop-shadow-2xl max-w-4xl">
+              {s.text}
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Dots */}
+      <div className="absolute bottom-6 left-0 w-full flex justify-center gap-3 z-20">
+        {items.map((_, i) => (
+          <div
+            key={i}
+            onClick={() => moveToNext(i + 1)}
+            className={`w-2.5 h-2.5 rounded-full cursor-pointer transition-all duration-300 ${
+              ((currentIndex - 1 + count) % count) === i ? 'bg-[#1FC81F] scale-125 shadow-lg' : 'bg-white opacity-40 shadow-sm'
+            }`}
+          />
+        ))}
+      </div>
+
+      {/* Arrows */}
+      <button 
+        onClick={() => moveToNext(currentIndex - 1)}
+        className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-black/10 hover:bg-black/30 text-white rounded-full transition-all opacity-0 md:group-hover:opacity-100 z-30"
+      >
+        <span className="text-3xl">‹</span>
+      </button>
+      <button 
+        onClick={() => moveToNext(currentIndex + 1)}
+        className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-black/10 hover:bg-black/30 text-white rounded-full transition-all opacity-0 md:group-hover:opacity-100 z-30"
+      >
+        <span className="text-3xl">›</span>
+      </button>
+    </div>
+  );
+};
+
+const FeatureBlock: React.FC<{ title: string; description: string; image: string; reverse?: boolean }> = ({ title, description, image, reverse }) => (
+  <section className="py-20 md:py-32">
+    <div className="container mx-auto px-6">
+      <div className={`flex flex-col ${reverse ? 'md:flex-row-reverse' : 'md:flex-row'} items-center gap-16 md:gap-24`}>
+        <div className="md:w-1/2 w-full">
+          <div className="relative group">
+            <div className="absolute -inset-4 bg-green-100 rounded-[2.5rem] rotate-2 group-hover:rotate-0 transition-transform duration-500 -z-10" />
+            <img src={image || 'https://via.placeholder.com/800x600'} className="w-full rounded-[2rem] shadow-2xl h-[400px] object-cover" alt={title} />
+          </div>
+        </div>
+        <div className="md:w-1/2 w-full">
+          <h2 className="text-4xl md:text-5xl font-black mb-8 relative inline-block text-gray-900 leading-tight">
+            {title}
+            <div className="absolute -bottom-2 left-0 w-2/3 h-2 bg-[#f5c339] rounded-full"></div>
+          </h2>
+          <p className="text-gray-600 text-xl leading-relaxed whitespace-pre-wrap mb-10">{description}</p>
+          <div className="flex flex-wrap gap-4">
+            <div className="bg-gray-50 border border-gray-100 px-6 py-3 rounded-full font-bold text-gray-500">✓ 現場透明維修</div>
+            <div className="bg-gray-50 border border-gray-100 px-6 py-3 rounded-full font-bold text-gray-500">✓ 30分鐘快速取件</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+);
+
+const PriceTable: React.FC<PriceTableContent> = ({ title, headers, rows }) => (
+  <section className="py-24 bg-gray-50 border-y border-gray-100">
+    <div className="container mx-auto px-6">
+      <h2 className="text-4xl font-black mb-16 text-center text-gray-900">{title}</h2>
+      <div className="bg-white rounded-[2rem] shadow-2xl border border-gray-100 overflow-hidden max-w-5xl mx-auto">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-[#111] text-white">
+              <tr>
+                {headers.map((h, i) => (
+                  <th key={i} className="px-8 py-6 font-bold uppercase tracking-wider">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((row, i) => (
+                <tr key={i} className="hover:bg-green-50/40 transition-colors">
+                  {row.map((cell, j) => (
+                    <td key={j} className={`px-8 py-6 ${j === 0 ? 'font-black text-gray-800' : 'text-gray-600 font-medium'}`}>
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+);
+
+const FAQSection: React.FC<{ title: string; items: FAQItem[] }> = ({ title, items }) => (
+  <section className="py-24">
+    <div className="container mx-auto px-6 max-w-4xl">
+      <h2 className="text-4xl font-black mb-16 text-center text-gray-900">{title}</h2>
+      <div className="space-y-10">
+        {items.map(f => (
+          <div key={f.id} className="bg-white p-8 md:p-10 rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+            <h4 className="text-2xl font-black text-[#1FC81F] mb-6 flex">
+              <span className="mr-4 opacity-20">Q.</span> {f.question}
+            </h4>
+            <p className="text-gray-500 text-xl flex leading-relaxed">
+              <span className="mr-4 opacity-20 font-bold">A.</span> {f.answer}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+);
+
+// --- Public Page Logic ---
+
+const PublicPage: React.FC = () => {
+  const { content } = useContent();
+  const { slug } = useParams<{ slug?: string }>();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setShowBackToTop(window.scrollY > 400);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const activePage = content.pages.find(p => slug ? p.slug === slug : p.slug === 'home');
+
+  if (!activePage) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 font-sans">
+        <div className="text-center">
+          <h1 className="text-9xl font-black text-gray-200 mb-8">404</h1>
+          <p className="text-gray-400 text-xl mb-12">您尋找的頁面暫時走失了</p>
+          <Link to="/" className="inline-block px-10 py-4 bg-[#1FC81F] text-white rounded-full font-black shadow-xl">返回首頁</Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-white font-sans text-gray-900">
+      <div className={`fixed inset-0 bg-black/60 z-[1050] backdrop-blur-md transition-opacity duration-500 ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsSidebarOpen(false)} />
+      <nav className={`fixed top-0 left-0 w-[320px] h-full bg-white z-[1100] p-10 shadow-2xl transition-transform duration-500 ease-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="text-3xl font-black mb-16 tracking-tighter text-gray-900 uppercase">
+          <span className="text-[#1FC81F]">Guard</span> Station
+        </div>
+        <ul className="space-y-6">
+          {content.pages.map(p => (
+            <li key={p.id}>
+              <Link to={p.slug === 'home' ? '/' : `/p/${p.slug}`} className={`text-2xl no-underline font-black block py-2 transition-colors ${p.slug === (slug || 'home') ? 'text-[#1FC81F]' : 'text-gray-400'}`} onClick={() => setIsSidebarOpen(false)}>{p.title}</Link>
+            </li>
+          ))}
+          <li className="pt-16 mt-16 border-t border-gray-100">
+            <Link to="/login" className="text-gray-300 font-bold no-underline">管理員登入</Link>
           </li>
         </ul>
       </nav>
 
-      {/* Header */}
-      <header className="flex justify-between items-center px-6 h-[60px] bg-white border-b border-gray-100 sticky top-0 z-50">
-        <div className="font-bold text-lg tracking-tight uppercase">{content.brandName}</div>
-        <button className="text-2xl focus:outline-none p-2" onClick={() => setIsSidebarOpen(true)}>☰</button>
+      <header className="flex justify-between items-center px-10 h-[80px] bg-white/90 backdrop-blur-md border-b border-gray-50 sticky top-0 z-50">
+        <Link to="/" className="font-black text-2xl tracking-tighter no-underline text-gray-900 uppercase flex items-center gap-2">
+          <div className="w-8 h-8 bg-[#1FC81F] rounded-lg"></div>
+          <span className="hidden sm:inline">Guard Station</span>
+          <span className="sm:hidden">GS</span>
+        </Link>
+        <button className="text-3xl p-2 hover:bg-gray-100 rounded-full" onClick={() => setIsSidebarOpen(true)}>☰</button>
       </header>
 
-      {/* Slider Wrapper */}
-      <div ref={sliderWrapperRef} className="relative overflow-hidden w-full h-[350px] bg-white group" style={{ touchAction: 'pan-y' }}>
-        <div 
-          ref={sliderRef}
-          className="flex h-full will-change-transform cursor-grab active:cursor-grabbing"
-          onMouseDown={dragStart}
-          onTouchStart={dragStart}
-          onMouseMove={dragging}
-          onTouchMove={dragging}
-          onMouseUp={dragEnd}
-          onTouchEnd={dragEnd}
-          onMouseLeave={dragEnd}
-          onTouchCancel={dragEnd}
-          onTransitionEnd={onTransitionEnd}
-        >
-          {slides.map((slide, i) => (
-            <div 
-              key={`${slide.id}-${i}`}
-              className="flex-shrink-0 w-full h-full relative overflow-hidden flex items-center justify-center text-white text-3xl font-bold select-none"
-              style={{ backgroundColor: slide.bgColor }}
-            >
-              {slide.imageUrl && (
-                <img 
-                  src={slide.imageUrl} 
-                  className="absolute inset-0 w-full h-full object-cover pointer-events-none" 
-                  alt={slide.text} 
-                />
-              )}
-              <div className="relative z-10 px-8 text-center drop-shadow-2xl">
-                {slide.text}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="absolute bottom-5 left-0 w-full flex justify-center gap-3 z-20">
-          {realSlides.map((_, i) => (
-            <span 
-              key={i} 
-              onClick={() => handleDotClick(i)}
-              className={`w-2.5 h-2.5 rounded-full cursor-pointer transition-all duration-300 ${i === getActiveDotIndex() ? 'bg-[#1FC81F] scale-125' : 'bg-white opacity-60 shadow-sm'}`}
-            />
-          ))}
-        </div>
-      </div>
+      <main>
+        {activePage.sections.map(section => {
+          switch (section.type) {
+            case 'HERO_SLIDER': return <HeroSlider key={section.id} items={section.content.items} />;
+            case 'FEATURE_BLOCK': return <FeatureBlock key={section.id} {...section.content} />;
+            case 'PRICE_TABLE': return <PriceTable key={section.id} {...section.content} />;
+            case 'FAQ_SECTION': return <FAQSection key={section.id} {...section.content} />;
+            default: return null;
+          }
+        })}
+      </main>
 
-      {/* Service 1: iPhone Screen */}
-      <section id="service1" className="py-16">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col md:flex-row items-center gap-12">
-            <div className="md:w-1/2">
-              <img src={content.repairImage} className="w-full rounded-2xl shadow-2xl" alt="螢幕維修" />
-            </div>
-            <div className="md:w-1/2">
-              <div className="p-4">
-                <h2 className="text-3xl font-extrabold mb-8 relative inline-block text-gray-800">
-                  {content.repairTitle}
-                  <div className="absolute -bottom-2 left-0 w-3/5 h-1.5 bg-[#f5c339]"></div>
-                </h2>
-                <p className="text-gray-600 mb-6 text-lg leading-relaxed">{content.repairDesc}</p>
-                <ul className="space-y-3 text-gray-500">
-                  <li className="flex items-center"><span className="text-[#1FC81F] mr-2">✅</span> 高品質 BSMI 認證零件</li>
-                  <li className="flex items-center"><span className="text-[#1FC81F] mr-2">✅</span> 工程師現場一對一維修</li>
-                  <li className="flex items-center"><span className="text-[#1FC81F] mr-2">✅</span> 維修後提供完整功能測試</li>
-                </ul>
-              </div>
-            </div>
+      <footer className="bg-[#111] text-white py-24 text-center">
+        <div className="container mx-auto px-10">
+          <p className="text-3xl font-black mb-10 tracking-tighter text-[#1FC81F]">GUARD STATION</p>
+          <div className="text-gray-500 text-lg space-y-2 mb-12">
+            <p>📍 {content.contactAddress}</p>
+            <p>📞 {content.contactPhone}</p>
           </div>
-        </div>
-      </section>
-
-      {/* Why Choose Us */}
-      <section className="py-20 bg-gray-50">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-12 text-gray-800">為什麼選擇保衛站？</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-10 bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition">
-              <div className="text-5xl mb-6">🛠️</div>
-              <h4 className="text-xl font-bold mb-4 text-gray-800">專業技術</h4>
-              <p className="text-gray-500 text-sm">十年以上維修經驗，精修各種主機板疑難雜症。</p>
-            </div>
-            <div className="p-10 bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition">
-              <div className="text-5xl mb-6">⚡</div>
-              <h4 className="text-xl font-bold mb-4 text-gray-800">快速取件</h4>
-              <p className="text-gray-500 text-sm">現場備料充足，簡單維修最快 20 分鐘即可完工。</p>
-            </div>
-            <div className="p-10 bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition">
-              <div className="text-5xl mb-6">🛡️</div>
-              <h4 className="text-xl font-bold mb-4 text-gray-800">售後保固</h4>
-              <p className="text-gray-500 text-sm">所有維修零件皆提供長效保固，全台連鎖服務。</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Service 2: Battery */}
-      <section id="service2" className="py-16">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col md:flex-row-reverse items-center gap-12">
-            <div className="md:w-1/2">
-              <img src={content.service2Image} className="w-full rounded-2xl shadow-2xl" alt="電池更換" />
-            </div>
-            <div className="md:w-1/2">
-              <div className="p-4">
-                <h2 className="text-3xl font-extrabold mb-8 relative inline-block text-gray-800">
-                  {content.service2Title}
-                  <div className="absolute -bottom-2 left-0 w-3/5 h-1.5 bg-[#f5c339]"></div>
-                </h2>
-                <p className="text-gray-600 mb-6 text-lg leading-relaxed">{content.service2Desc}</p>
-                <div className="mt-4">
-                  <a href="https://line.me" className="inline-block px-8 py-3 bg-[#f5c339] text-gray-900 font-bold rounded-lg shadow-lg hover:scale-105 transition no-underline" target="_blank">立即預約檢測</a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Price Table */}
-      <section id="prices" className="py-20 bg-gray-50">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold mb-2 text-gray-800">維修價格透明化</h2>
-            <div className="text-gray-400 md:hidden text-sm">💡 左右滑動查看完整表格</div>
-          </div>
-          <div className="overflow-x-auto bg-white rounded-2xl shadow-xl border border-gray-100">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-gray-800 text-white">
-                <tr>
-                  <th className="px-6 py-4 whitespace-nowrap">機型名稱</th>
-                  <th className="px-6 py-4 whitespace-nowrap">更換電池</th>
-                  <th className="px-6 py-4 whitespace-nowrap">更換螢幕</th>
-                  <th className="px-6 py-4 whitespace-nowrap">鏡頭維修</th>
-                  <th className="px-6 py-4 whitespace-nowrap">主機板維修</th>
-                  <th className="px-6 py-4 whitespace-nowrap">後玻璃更換</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {content.priceRows.map((row, i) => (
-                  <tr key={i} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 font-bold text-gray-800">{row.model}</td>
-                    <td className="px-6 py-4 text-gray-600">{row.battery}</td>
-                    <td className="px-6 py-4 text-gray-600">{row.screen}</td>
-                    <td className="px-6 py-4 text-gray-600">{row.lens}</td>
-                    <td className="px-6 py-4 text-gray-600">{row.motherboard}</td>
-                    <td className="px-6 py-4 text-gray-600">{row.backGlass}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section id="faq" className="py-20">
-        <div className="container mx-auto px-4 max-w-[800px]">
-          <h2 className="text-center text-3xl font-bold mb-12 text-gray-800">常見問題</h2>
-          <div className="space-y-12">
-            {content.faqs.map(faq => (
-              <div key={faq.id}>
-                <h5 className="text-xl font-bold text-green-600 mb-3">Q: {faq.question}</h5>
-                <p className="text-gray-600">A: {faq.answer}</p>
-                <hr className="mt-8 border-gray-100" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white py-16">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-lg mb-4">© 2024 {content.brandName} | 專業維修中心</p>
-          <div className="text-gray-400 space-y-1 text-sm">
-            <p>營業時間：11:00 - 21:00</p>
-            <p>地址：{content.contactAddress}</p>
-            <p>電話：{content.contactPhone}</p>
-          </div>
+          <p className="text-gray-700 text-sm font-bold uppercase tracking-widest pt-12 border-t border-gray-800">© 2025 {content.brandName}. All rights reserved.</p>
         </div>
       </footer>
 
-      {/* FAB */}
-      <div className="fixed right-6 bottom-8 flex flex-col gap-3 z-[1000]">
-        <a href="https://line.me" className="w-14 h-14 rounded-full bg-[#06C755] flex items-center justify-center text-white font-bold no-underline shadow-lg hover:scale-110 transition" target="_blank">LINE</a>
-        <a href={`tel:${content.contactPhone}`} className="w-14 h-14 rounded-full bg-gray-900 flex items-center justify-center text-white font-bold no-underline shadow-lg hover:scale-110 transition text-sm">電話</a>
+      {/* Floating Buttons */}
+      <div className="fixed right-6 bottom-8 flex flex-col gap-4 z-[1000]">
         <button 
-          className={`w-14 h-14 rounded-full bg-white text-gray-800 flex items-center justify-center font-bold shadow-lg transition-all duration-300 ${showBackToTop ? 'opacity-100 scale-100' : 'opacity-0 scale-0 pointer-events-none'}`}
+          className={`w-14 h-14 rounded-full bg-white text-gray-800 flex items-center justify-center font-bold shadow-2xl transition-all duration-300 ${showBackToTop ? 'opacity-100 scale-100' : 'opacity-0 scale-0 pointer-events-none'}`}
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
         >
           ▲
