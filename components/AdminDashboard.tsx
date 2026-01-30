@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useContent } from '../App';
-import { SiteContent, CustomPage, PageSection, SectionType, SliderItem, PriceTableContent } from '../types';
+import { SiteContent, CustomPage, PageSection, SectionType, SliderItem, PriceTableContent, FAQItem } from '../types';
 import LandingPagePreview from './LandingPagePreview';
 import ImageUpload from './ImageUpload';
 
@@ -305,7 +305,7 @@ const AdminDashboard: React.FC = () => {
 
                         {sec.type === 'HERO_SLIDER' && (
                           <div className="space-y-6">
-                            {sec.content.items.map((item: SliderItem, itemIdx: number) => (
+                            {(sec.content.items as SliderItem[]).map((item: SliderItem, itemIdx: number) => (
                               <div key={item.id} className="p-4 bg-white rounded-xl border border-gray-100 space-y-3 relative shadow-sm">
                                 <div className="flex justify-between items-center mb-1">
                                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">幻燈片圖片 #{itemIdx + 1}</span>
@@ -313,7 +313,7 @@ const AdminDashboard: React.FC = () => {
                                     <button 
                                       onClick={() => {
                                         if (window.confirm('確定要移除此張幻燈片嗎？')) {
-                                          const its = sec.content.items.filter((_, i) => i !== itemIdx);
+                                          const its = (sec.content.items as SliderItem[]).filter((_: SliderItem, i: number) => i !== itemIdx);
                                           updateSection(sec.id, { items: its });
                                         }
                                       }}
@@ -326,7 +326,7 @@ const AdminDashboard: React.FC = () => {
                                 <input 
                                   value={item.text} 
                                   onChange={e => {
-                                    const its = [...sec.content.items]; 
+                                    const its = [...(sec.content.items as SliderItem[])]; 
                                     its[itemIdx] = { ...its[itemIdx], text: e.target.value };
                                     updateSection(sec.id, { items: its });
                                   }} 
@@ -337,7 +337,7 @@ const AdminDashboard: React.FC = () => {
                                   label="背景圖片" 
                                   value={item.imageUrl} 
                                   onChange={val => {
-                                    const its = [...sec.content.items]; 
+                                    const its = [...(sec.content.items as SliderItem[])]; 
                                     its[itemIdx] = { ...its[itemIdx], imageUrl: val };
                                     updateSection(sec.id, { items: its });
                                   }} 
@@ -347,7 +347,7 @@ const AdminDashboard: React.FC = () => {
                             <button 
                               onClick={() => {
                                 const newItem = { id: Math.random().toString(36).substr(2, 9), text: '新標題文字', bgColor: '#333' };
-                                updateSection(sec.id, { items: [...sec.content.items, newItem] });
+                                updateSection(sec.id, { items: [...(sec.content.items as SliderItem[]), newItem] });
                               }}
                               className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 hover:border-[#1FC81F] hover:text-[#1FC81F] transition-all"
                             >
@@ -365,22 +365,22 @@ const AdminDashboard: React.FC = () => {
                                  <table className="min-w-full text-xs">
                                    <thead>
                                      <tr>
-                                       {sec.content.headers.map((h: string, hIdx: number) => (
+                                       {(sec.content.headers as string[]).map((h: string, hIdx: number) => (
                                          <th key={hIdx} className="p-2 border-b">
                                            <div className="flex flex-col gap-1">
                                              <input 
                                                value={h} 
                                                onChange={e => {
-                                                 const headers = [...sec.content.headers];
+                                                 const headers = [...(sec.content.headers as string[])];
                                                  headers[hIdx] = e.target.value;
                                                  updateSection(sec.id, { headers });
                                                }}
                                                className="w-full border p-1 rounded font-bold"
                                              />
-                                             {sec.content.headers.length > 1 && (
+                                             {(sec.content.headers as string[]).length > 1 && (
                                                <button onClick={() => {
-                                                  const headers = sec.content.headers.filter((_:any, i:any) => i !== hIdx);
-                                                  const rows = sec.content.rows.map((row:any) => row.filter((_:any, i:any) => i !== hIdx));
+                                                  const headers = (sec.content.headers as string[]).filter((_: string, i: number) => i !== hIdx);
+                                                  const rows = (sec.content.rows as string[][]).map((row: string[]) => row.filter((_: string, i: number) => i !== hIdx));
                                                   updateSection(sec.id, { headers, rows });
                                                }} className="text-[8px] text-red-300">移除欄</button>
                                              )}
@@ -390,22 +390,22 @@ const AdminDashboard: React.FC = () => {
                                        <th className="p-2 border-b">
                                          <button onClick={() => {
                                            updateSection(sec.id, { 
-                                             headers: [...sec.content.headers, '新欄位'],
-                                             rows: sec.content.rows.map((row:any) => [...row, '$0'])
+                                             headers: [...(sec.content.headers as string[]), '新欄位'],
+                                             rows: (sec.content.rows as string[][]).map((row: string[]) => [...row, '$0'])
                                            });
                                          }} className="text-[#1FC81F] font-bold">+</button>
                                        </th>
                                      </tr>
                                    </thead>
                                    <tbody>
-                                     {sec.content.rows.map((row: string[], rIdx: number) => (
+                                     {(sec.content.rows as string[][]).map((row: string[], rIdx: number) => (
                                        <tr key={rIdx}>
                                          {row.map((cell: string, cIdx: number) => (
                                            <td key={cIdx} className="p-1 border-b">
                                              <input 
                                                value={cell} 
                                                onChange={e => {
-                                                 const rows = [...sec.content.rows];
+                                                 const rows = [...(sec.content.rows as string[][])];
                                                  rows[rIdx] = [...rows[rIdx]];
                                                  rows[rIdx][cIdx] = e.target.value;
                                                  updateSection(sec.id, { rows });
@@ -415,9 +415,9 @@ const AdminDashboard: React.FC = () => {
                                            </td>
                                          ))}
                                          <td className="p-1 border-b text-center">
-                                           {sec.content.rows.length > 1 && (
+                                           {(sec.content.rows as string[][]).length > 1 && (
                                              <button onClick={() => {
-                                               const rows = sec.content.rows.filter((_:any, i:any) => i !== rIdx);
+                                               const rows = (sec.content.rows as string[][]).filter((_: string[], i: number) => i !== rIdx);
                                                updateSection(sec.id, { rows });
                                              }} className="text-red-300">✕</button>
                                            )}
@@ -428,8 +428,8 @@ const AdminDashboard: React.FC = () => {
                                  </table>
                                </div>
                                <button onClick={() => {
-                                 const newRow = new Array(sec.content.headers.length).fill('-');
-                                 updateSection(sec.id, { rows: [...sec.content.rows, newRow] });
+                                 const newRow = new Array((sec.content.headers as string[]).length).fill('-');
+                                 updateSection(sec.id, { rows: [...(sec.content.rows as string[][]), newRow] });
                                }} className="w-full py-2 bg-gray-50 text-[10px] font-bold text-gray-400 hover:text-green-500 transition-colors uppercase">
                                  + 新增資料列
                                </button>
@@ -440,30 +440,30 @@ const AdminDashboard: React.FC = () => {
                         {sec.type === 'FAQ_SECTION' && (
                           <div className="space-y-4">
                             <input value={sec.content.title} onChange={e => updateSection(sec.id, { title: e.target.value })} className={inputCls} placeholder="問答區標題" />
-                            {sec.content.items.map((faq: any, faqIdx: number) => (
+                            {(sec.content.items as FAQItem[]).map((faq: FAQItem, faqIdx: number) => (
                               <div key={faq.id} className="p-3 bg-white rounded-xl border border-gray-100 space-y-2 relative">
                                 <div className="flex justify-between">
                                   <span className="text-[9px] font-black text-gray-300">FAQ #{faqIdx + 1}</span>
                                   <button onClick={() => {
                                     if (window.confirm('確定要刪除此問答項嗎？')) {
-                                      const its = sec.content.items.filter((_:any, i:number) => i !== faqIdx);
+                                      const its = (sec.content.items as FAQItem[]).filter((_: FAQItem, i: number) => i !== faqIdx);
                                       updateSection(sec.id, { items: its });
                                     }
                                   }} className="text-red-300 hover:text-red-500 text-[9px]">刪除</button>
                                 </div>
                                 <input value={faq.question} onChange={e => {
-                                  const its = [...sec.content.items]; its[faqIdx].question = e.target.value;
+                                  const its = [...(sec.content.items as FAQItem[])]; its[faqIdx].question = e.target.value;
                                   updateSection(sec.id, { items: its });
                                 }} className={inputCls} placeholder="輸入問題..." />
                                 <textarea value={faq.answer} onChange={e => {
-                                  const its = [...sec.content.items]; its[faqIdx].answer = e.target.value;
+                                  const its = [...(sec.content.items as FAQItem[])]; its[faqIdx].answer = e.target.value;
                                   updateSection(sec.id, { items: its });
                                 }} className={`${inputCls} h-20 text-xs`} placeholder="輸入回答..." />
                               </div>
                             ))}
                             <button onClick={() => {
                                const newItem = { id: Math.random().toString(36).substr(2,9), question: '', answer: '' };
-                               updateSection(sec.id, { items: [...sec.content.items, newItem] });
+                               updateSection(sec.id, { items: [...(sec.content.items as FAQItem[]), newItem] });
                             }} className="w-full py-2 border border-dashed border-gray-200 rounded-lg text-[10px] text-gray-400 font-bold hover:text-[#1FC81F]">
                               + 新增常見問題
                             </button>
