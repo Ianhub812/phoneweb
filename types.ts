@@ -1,17 +1,10 @@
 
-export interface PriceRow {
-  model: string;
-  battery: string;
-  screen: string;
-  lens: string;
-  motherboard: string;
-  backGlass: string;
-}
+export type SectionType = 'HERO_SLIDER' | 'FEATURE_BLOCK' | 'PRICE_TABLE' | 'FAQ_SECTION';
 
-export interface FAQItem {
+export interface PageSection {
   id: string;
-  question: string;
-  answer: string;
+  type: SectionType;
+  content: any; // Data specific to each block type
 }
 
 export interface SliderItem {
@@ -21,24 +14,31 @@ export interface SliderItem {
   imageUrl?: string;
 }
 
+export interface PriceTableContent {
+  title: string;
+  headers: string[];
+  rows: string[][];
+}
+
+export interface FAQItem {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+export interface CustomPage {
+  id: string;
+  title: string;
+  slug: string;
+  sections: PageSection[];
+}
+
 export interface SiteContent {
   brandName: string;
-  sliderItems: SliderItem[];
-  primaryColor: string;
-  accentColor: string;
-  // Service 1
-  repairTitle: string;
-  repairDesc: string;
-  repairImage: string;
-  // Service 2 (Battery)
-  service2Title: string;
-  service2Desc: string;
-  service2Image: string;
-  priceRows: PriceRow[];
-  faqs: FAQItem[];
   contactEmail: string;
   contactPhone: string;
   contactAddress: string;
+  pages: CustomPage[];
 }
 
 export interface User {

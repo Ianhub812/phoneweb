@@ -7,7 +7,6 @@ import Login from './components/Login';
 import { SiteContent, User } from './types';
 import { DEFAULT_CONTENT, STORAGE_KEY, AUTH_KEY } from './constants';
 
-// Context for shared site content
 interface ContentContextType {
   content: SiteContent;
   updateContent: (newContent: SiteContent) => void;
@@ -29,7 +28,6 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    // Load published content
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
@@ -38,8 +36,6 @@ const App: React.FC = () => {
         console.error("Failed to parse saved content", e);
       }
     }
-
-    // Load auth state
     const auth = localStorage.getItem(AUTH_KEY);
     if (auth) {
       setUser({ username: auth, isAuthenticated: true });
@@ -66,6 +62,7 @@ const App: React.FC = () => {
       <HashRouter>
         <Routes>
           <Route path="/" element={<PublicPage />} />
+          <Route path="/p/:slug" element={<PublicPage />} />
           <Route path="/login" element={user?.isAuthenticated ? <Navigate to="/admin" /> : <Login />} />
           <Route 
             path="/admin" 
